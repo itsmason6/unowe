@@ -1,0 +1,11 @@
+{
+  "name": "unowe",
+  "version": "0.1.0",
+  "private": true,
+  "description": "UNOWE table + room server",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js"
+  },
+  "engines": { "node": ">=18" }
+}
