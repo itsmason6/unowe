@@ -7,10 +7,5 @@
   "scripts": {
     "start": "node server/server.js"
   },
-  "dependencies": {
-    "ws": "^8.21.3"
-  },
-  "engines": {
-    "node": ">=18"
-  }
+  "engines": { "node": ">=18" }
 }
