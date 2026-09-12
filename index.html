@@ -88,12 +88,7 @@
       <div class="topbar">
         <div class="brand">UNOWE</div>
         <div class="tiny" id="suit-name"></div>
-        <div class="menu-wrap">
-          <button type="button" class="btn home-btn" id="btn-burger" aria-label="Menu">☰</button>
-          <div id="burger-panel" class="burger-panel hidden">
-            <button type="button" id="btn-table-home">LEAVE GAME</button>
-          </div>
-        </div>
+        <button type="button" class="btn home-btn" id="btn-table-home">HOME</button>
       </div>
       <div id="opponents"></div>
       <div id="board">
@@ -155,21 +150,19 @@
   <div id="win" class="hidden">
     <div class="sheet">
       <h2 id="win-msg">YOU WIN.</h2>
-      <p id="win-sub">First empty hand. Queen is still a trap.</p>
+      <p>First empty hand. Queen is still a trap.</p>
       <p class="tiny" id="again-wait"></p>
-      <div id="again-list" class="again-list"></div>
-      <button class="btn gold" id="btn-again" style="margin-top:12px">REMATCH</button>
-      <button class="btn" id="btn-home" style="margin-top:8px;min-width:0;width:100%">LEAVE</button>
+      <button class="btn gold" id="btn-again" style="margin-top:12px">PLAY AGAIN</button>
+      <button class="btn" id="btn-home" style="margin-top:8px;min-width:0;width:100%">HOME</button>
     </div>
   </div>
 
   <div id="toast" class="toast hidden"></div>
 
-  <script src="js/config.js?v=fly6"></script>
-  <script src="js/engine.js?v=fly6"></script>
-  <script src="js/ai.js?v=fly6"></script>
-  <script src="js/net.js?v=fly6"></script>
-  <script src="js/ui.js?v=fly6"></script>
-  <script src="js/fx.js?v=fly6"></script>
+  <script src="js/config.js"></script>
+  <script src="js/engine.js"></script>
+  <script src="js/ai.js"></script>
+  <script src="js/net.js"></script>
+  <script src="js/ui.js"></script>
 </body>
 </html>
