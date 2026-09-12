@@ -87,6 +87,8 @@ function lobbyPayload(room) {
       name: p.name,
       host: p.id === room.hostId,
       connected: p.ws && p.ws.readyState === 1,
+      ready: !!p.ready,
+      left: !!p.left,
     })),
     chat: room.chat.slice(-40),
   };
@@ -104,11 +106,15 @@ function snapshotTo(room, player) {
   const idx = room.players.findIndex((p) => p.id === player.id);
   if (idx < 0) return;
   const view = E.publicView(room.engine, idx);
-  send(player.ws, "state", { state: view });
+  send(player.ws, "state", { state: view, move: room.lastMove || null });
 }
 
 function broadcastState(room) {
   for (const p of room.players) snapshotTo(room, p);
+}
+
+function broadcastEvent(room, ev) {
+  for (const p of room.players) send(p.ws, "event", ev);
 }
 
 function listBlast() {
@@ -137,6 +143,21 @@ function dropSocket(ws, eject) {
   gone.ws = null;
   gone.connected = false;
   if (eject || room.phase === "over") {
+    if (room.phase === "playing" && room.engine && !room.engine.gameOver) {
+      try { E.abandon(room.engine, i); } catch (err) {}
+      room.moveSeq = (room.moveSeq || 0) + 1;
+      room.lastMove = { id: room.moveSeq, kind: "leave", from: i, name: gone.name };
+      gone.left = true;
+      gone.ws = null;
+      meta.room = null;
+      room.chat.push({ name: "TABLE", text: gone.name + " left the table." });
+      if (room.engine.gameOver) room.phase = "over";
+      broadcastEvent(room, room.lastMove);
+      broadcastState(room);
+      broadcastLobby(room);
+      listBlast();
+      return;
+    }
     room.players.splice(i, 1);
     meta.room = null;
     if (room.hostId === gone.id && room.players[0]) room.hostId = room.players[0].id;
@@ -147,12 +168,14 @@ function dropSocket(ws, eject) {
     }
     broadcastLobby(room);
     listBlast();
+    if (room.phase === "over") tryStartNext(room);
     return;
   }
   meta.room = null;
   room.chat.push({ name: "TABLE", text: gone.name + " dropped. Waiting to reconnect." });
   broadcastLobby(room);
   listBlast();
+  if (room.phase === "over") tryStartNext(room);
   const token = gone.token;
   setTimeout(function () {
     const still = rooms.get(room.code);
@@ -175,6 +198,24 @@ function dropSocket(ws, eject) {
 
 function leave(ws) {
   dropSocket(ws, true);
+}
+
+function tryStartNext(room) {
+  const seated = room.players.filter(function (p) {
+    return p.ws && p.ws.readyState === 1 && !p.left;
+  });
+  const readyN = seated.filter(function (p) { return p.ready === true; }).length;
+  if (seated.length < 2) return;
+  if (readyN < seated.length) return;
+  room.players = seated;
+  seated.forEach(function (p) { p.ready = false; });
+  const lineup = room.players.map(function (p) { return { name: p.name, isAI: false }; });
+  room.engine = E.createGame(lineup);
+  room.phase = "playing";
+  room.chat.push({ name: "TABLE", text: "Everyone's in. Next hand." });
+  broadcastLobby(room);
+  broadcastState(room);
+  listBlast();
 }
 
 function startGame(room) {
@@ -294,9 +335,32 @@ function handle(ws, msg) {
     else if (t === "pickup") res = E.pickUp(room.engine, idx);
     else res = E.chooseSuit(room.engine, msg.suit);
     if (!res || !res.ok) return send(ws, "error", { error: (res && res.error) || "No." });
+    const pname = room.players[idx] ? room.players[idx].name : meta.name;
+    room.moveSeq = (room.moveSeq || 0) + 1;
+    if (t === "play") {
+      room.lastMove = {
+        id: room.moveSeq,
+        kind: "play",
+        from: idx,
+        name: pname,
+        cards: room.engine.justPlayed || [],
+      };
+    } else if (t === "pickup") {
+      room.lastMove = {
+        id: room.moveSeq,
+        kind: "pickup",
+        from: idx,
+        name: pname,
+        count: res.drawnCount || 1,
+      };
+    } else {
+      room.lastMove = { id: room.moveSeq, kind: "suit", from: idx, name: pname, suit: msg.suit };
+    }
+    broadcastEvent(room, room.lastMove);
     broadcastState(room);
     if (room.engine.gameOver) {
       room.phase = "over";
+      room.players.forEach(function (p) { p.ready = false; });
       broadcastLobby(room);
       listBlast();
     }
@@ -305,19 +369,16 @@ function handle(ws, msg) {
   if (t === "again") {
     const room = rooms.get(meta.room);
     if (!room) return send(ws, "error", { error: "No room." });
-    if (meta.id !== room.hostId) return send(ws, "error", { error: "Only the host starts the next hand." });
-    const seated = room.players.filter(function (p) {
-      return p.ws && p.ws.readyState === 1;
-    });
-    if (seated.length < 2) return send(ws, "error", { error: "Need at least 2 still here." });
-    room.players = seated;
-    const lineup = room.players.map(function (p) { return { name: p.name, isAI: false }; });
-    room.engine = E.createGame(lineup);
-    room.phase = "playing";
-    room.chat.push({ name: "TABLE", text: "Next hand." });
+    if (room.phase !== "over" && !(room.engine && room.engine.gameOver)) {
+      return send(ws, "error", { error: "Hand is still going." });
+    }
+    const me = room.players.find(function (p) { return p.id === meta.id; });
+    if (!me) return;
+    me.ready = true;
+    room.phase = "over";
+    room.chat.push({ name: "TABLE", text: meta.name + " is ready for the next hand." });
     broadcastLobby(room);
-    broadcastState(room);
-    listBlast();
+    tryStartNext(room);
     return;
   }
 }

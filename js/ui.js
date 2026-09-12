@@ -12,6 +12,10 @@
   let seatTarget = 4;
   let lobby = null;
   let pendingSnap = null;
+  let lastPlayKey = "";
+  let eventQ = [];
+  let snapQ = [];
+  let lastMoveId = 0;
   const Net = window.CardoNet;
 
   const $ = (id) => document.getElementById(id);
@@ -67,6 +71,8 @@
       }),
     };
     humanIndex = view.you;
+    state.you = view.you;
+    state.winReason = view.winReason || null;
   }
 
   function renderLobby() {
@@ -88,6 +94,43 @@
     log.scrollTop = log.scrollHeight;
   }
 
+  function renderAgainWait() {
+    const el = $("again-wait");
+    const btn = $("btn-again");
+    if (!el || !lobby) return;
+    const seated = (lobby.players || []).filter(function (p) {
+      return p.connected !== false && !p.left;
+    });
+    const list = $("again-list");
+    if (!seated.length) {
+      el.textContent = "";
+      if (list) list.innerHTML = "";
+      return;
+    }
+    const ready = seated.filter(function (p) { return p.ready; }).length;
+    el.textContent = ready + " / " + seated.length + " WANT A REMATCH.";
+    if (list) {
+      list.innerHTML = seated.map(function (p) {
+        return '<div class="' + (p.ready ? "yes" : "") + '">' + p.name + (p.ready ? " — IN" : " — …") + "</div>";
+      }).join("");
+    }
+    if (seated.length < 2) {
+      btn.classList.add("hidden");
+      el.textContent = "NO ONE LEFT TO REMATCH.";
+      if (list) list.innerHTML = "";
+      return;
+    }
+    btn.classList.remove("hidden");
+    const me = seated.find(function (p) { return p.id === (Net && Net.id); });
+    if (me && me.ready) {
+      btn.textContent = "WAITING…";
+      btn.disabled = true;
+    } else {
+      btn.textContent = "REMATCH";
+      btn.disabled = false;
+    }
+  }
+
   function renderRooms(list) {
     const el = $("room-list");
     if (!list || !list.length) {
@@ -103,6 +146,12 @@
   function goOnline() {
     const name = playerName();
     $("player-name").value = name;
+    const sock = (window.UNOWE_SOCKET || "").trim();
+    const onVercel = /vercel\.app$/i.test(location.hostname);
+    if (onVercel && !sock) {
+      toast("VERCEL CAN'T HOST ROOMS. SET js/config.js");
+      return;
+    }
     Net.connect(name).then(function () {
       show("hub");
     }).catch(function () {
@@ -132,14 +181,18 @@
       } else {
         renderLobby();
       }
+      if (m.phase === "over") renderAgainWait();
+    });
+    Net.on("event", function (m) {
+      online = true;
+      enqueueMove(m);
+      pumpNet();
     });
     Net.on("state", function (m) {
       online = true;
-      if (busy) {
-        pendingSnap = m.state;
-        return;
-      }
-      applyOnlineState(m.state);
+      if (m.move) enqueueMove(m.move);
+      snapQ.push(m.state);
+      pumpNet();
     });
     Net.on("left", function () {
       online = false;
@@ -280,8 +333,26 @@
 
     if (state.gameOver) {
       $("win").classList.remove("hidden");
-      $("win-msg").textContent =
-        state.winner === humanIndex ? "YOU WIN." : state.players[state.winner].name + " WINS.";
+      const leftWin = state.winReason === "left";
+      if (state.winner === humanIndex) {
+        $("win-msg").textContent = leftWin ? "THEY LEFT. YOU WIN." : "YOU WIN.";
+      } else if (state.winner != null && state.players[state.winner]) {
+        $("win-msg").textContent = state.players[state.winner].name + " WINS.";
+      } else {
+        $("win-msg").textContent = "TABLE EMPTY.";
+      }
+      $("win-sub").textContent = leftWin
+        ? "Last one still in the room takes it."
+        : "First empty hand. Queen is still a trap.";
+      const alive = (state.players || []).filter(function (p) { return !p.left; }).length;
+      if (leftWin || alive < 2) {
+        $("btn-again").classList.add("hidden");
+        $("again-wait").textContent = "NO REMATCH. THE TABLE DIED.";
+        $("again-list").innerHTML = "";
+      } else {
+        $("btn-again").classList.remove("hidden");
+        renderAgainWait();
+      }
     } else {
       $("win").classList.add("hidden");
     }
@@ -399,8 +470,8 @@
     function next() {
       if (i >= cards.length) {
         busy = false;
-        render();
         if (then) then();
+        else render();
         return;
       }
       tickSeatCount(name);
@@ -429,6 +500,7 @@
     for (let i = 0; i < hand.length; i++) {
       const c = hand[i];
       if (!c || !c.id || used[c.id]) continue;
+      if (E.isJoker(c) || E.isAce(c)) continue;
       if (E.chainValid(cards.concat(c), state)) return true;
     }
     return false;
@@ -459,41 +531,143 @@
     return null;
   }
 
-  function afterOnlineAnim() {
-    if (pendingSnap) {
-      const snap = pendingSnap;
-      pendingSnap = null;
-      applyOnlineState(snap);
+  function drawRect() {
+    const el = document.querySelector(".stack-back") || $("draw-count");
+    return el ? el.getBoundingClientRect() : { left: 40, top: 120, width: 70, height: 100 };
+  }
+
+  function handRect() {
+    const el = $("hand");
+    return el ? el.getBoundingClientRect() : { left: 80, top: window.innerHeight - 160, width: 80, height: 110 };
+  }
+
+  function originFor(name, mine) {
+    if (mine) return handRect();
+    return seatRect(name);
+  }
+
+  function destFor(name, mine) {
+    if (mine) return handRect();
+    return seatRect(name);
+  }
+
+  function flyBack(fromRect, toRect, ms) {
+    ms = ms || 420;
+    return new Promise(function (resolve) {
+      const flyer = document.createElement("div");
+      flyer.className = "flyer flyer-back";
+      flyer.style.transition = "left " + ms + "ms ease-in-out, top " + ms + "ms ease-in-out";
+      flyer.style.width = (fromRect.width || 62) + "px";
+      flyer.style.height = (fromRect.height || 88) + "px";
+      flyer.style.left = fromRect.left + "px";
+      flyer.style.top = fromRect.top + "px";
+      document.body.appendChild(flyer);
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+          flyer.style.left = toRect.left + Math.max(0, (toRect.width - (fromRect.width || 62)) / 2) + "px";
+          flyer.style.top = toRect.top + Math.max(0, (toRect.height - (fromRect.height || 88)) / 2) + "px";
+        });
+      });
+      setTimeout(function () {
+        flyer.remove();
+        resolve();
+      }, ms + 40);
+    });
+  }
+
+  function whoAmI(ev) {
+    if (state && state.you != null) return state.you;
+    return humanIndex;
+  }
+
+  function alreadyOnPile(cards) {
+    if (!state || !cards || !cards.length) return false;
+    const d = state.discard || [];
+    if (d.length < cards.length) return false;
+    const tail = d.slice(-cards.length);
+    return tail.every(function (c, i) { return c && cards[i] && c.id === cards[i].id; });
+  }
+
+  function runPlayEvent(ev, done) {
+    if (ev.id) lastMoveId = ev.id;
+    const cards = ev.cards || [];
+    const mine = ev.from === whoAmI(ev);
+    const name = ev.name || "PLAYER";
+    if (!cards.length) return done();
+    if (alreadyOnPile(cards)) return done();
+    const rects = cards.map(function (card) {
+      if (mine) {
+        const el = document.querySelector('#hand [data-id="' + card.id + '"]');
+        if (el) return el.getBoundingClientRect();
+        return handRect();
+      }
+      return seatRect(name);
+    });
+    playSequence(cards, rects, name, done, mine ? 500 : 850, mine ? 180 : 260);
+  }
+
+  function runPickupEvent(ev, done) {
+    if (ev.id) lastMoveId = ev.id;
+    const n = Math.max(1, Math.min(12, ev.count || 1));
+    const mine = ev.from === whoAmI(ev);
+    const from = drawRect();
+    const to = destFor(ev.name, mine);
+    busy = true;
+    var i = 0;
+    function next() {
+      if (i >= n) {
+        busy = false;
+        done();
+        return;
+      }
+      i += 1;
+      flyBack(from, to, 380).then(function () {
+        setTimeout(next, 70);
+      });
     }
+    next();
   }
 
-  function seatRect(name) {
-    const seat = document.querySelector('#opponents .seat[data-name="' + name + '"]')
-      || document.querySelector("#opponents .seat");
-    const origin = seat ? seat.getBoundingClientRect() : { left: window.innerWidth / 2, top: 8, width: 80, height: 40 };
-    return {
-      left: origin.left + origin.width / 2 - 43,
-      top: Math.max(8, origin.top - 10),
-      width: 86,
-      height: 122
-    };
+  function enqueueMove(m) {
+    if (!m || !m.kind) return;
+    if (m.kind === "suit" || m.kind === "leave") return;
+    if (m.id && m.id <= lastMoveId) return;
+    if (eventQ.some(function (e) { return m.id && e.id === m.id; })) return;
+    eventQ = eventQ.filter(function (e) {
+      if (!m.id || !e.id) return true;
+      if (m.kind === "pickup" && e.kind === "play" && e.id < m.id) return false;
+      return e.id >= m.id || e.id === m.id;
+    });
+    eventQ.push(m);
   }
 
-  function applyOnlineState(view) {
-    const played = view.justPlayed || [];
-    const by = view.justPlayedBy;
-    const name = view.players && view.players[by] ? view.players[by].name : "PLAYER";
-    if (played.length && by !== humanIndex && by != null) {
-      hydrate(view);
-      show("table");
-      const rects = played.map(function () { return seatRect(name); });
-      playSequence(played, rects, name, afterOnlineAnim, 850, 280);
+  function pumpNet() {
+    if (busy) return;
+    if (eventQ.length) {
+      const ev = eventQ.shift();
+      if (ev.kind === "pickup") {
+        runPickupEvent(ev, function () { pumpNet(); });
+        return;
+      }
+      if (ev.kind === "play") {
+        runPlayEvent(ev, function () { pumpNet(); });
+        return;
+      }
+      pumpNet();
       return;
     }
-    hydrate(view);
-    show("table");
-    selected = [];
-    render();
+    if (snapQ.length) {
+      const view = snapQ.pop();
+      snapQ.length = 0;
+      hydrate(view);
+      show("table");
+      selected = [];
+      render();
+    }
+  }
+
+  function afterOnlineAnim() {
+    pumpNet();
   }
 
   function commitPlay() {
@@ -505,8 +679,6 @@
     });
     if (online) {
       Net.send("play", { ids: selected });
-      selected = [];
-      playSequence(cards, rects, state.players[humanIndex].name, afterOnlineAnim, 500, 180);
       return;
     }
     const res = E.playCards(state, humanIndex, selected);
@@ -535,7 +707,6 @@
     if (busy) return;
     if (online) {
       Net.send("pickup", {});
-      selected = [];
       return;
     }
     const res = E.pickUp(state, humanIndex);
@@ -690,15 +861,22 @@
       });
     });
     $("btn-again").addEventListener("click", function () {
-      $("win").classList.add("hidden");
       if (online) {
+        $("btn-again").textContent = "WAITING…";
+        $("btn-again").disabled = true;
         Net.send("again");
         return;
       }
+      $("win").classList.add("hidden");
       startVsAI();
     });
-    $("btn-home").addEventListener("click", () => {
+    function goHome() {
       $("win").classList.add("hidden");
+      $("confirm").classList.add("hidden");
+      $("modal").classList.add("hidden");
+      busy = false;
+      selected = [];
+      pendingSnap = null;
       if (online) {
         Net.send("leave");
         show("hub");
@@ -706,6 +884,19 @@
       }
       show("start");
       state = null;
+    }
+    $("btn-home").addEventListener("click", goHome);
+    $("btn-table-home").addEventListener("click", function () {
+      $("burger-panel").classList.add("hidden");
+      goHome();
+    });
+    $("btn-burger").addEventListener("click", function (e) {
+      e.stopPropagation();
+      $("burger-panel").classList.toggle("hidden");
+    });
+    document.addEventListener("click", function () {
+      const pan = $("burger-panel");
+      if (pan) pan.classList.add("hidden");
     });
     $("hand").addEventListener("click", onHandClick);
     $("btn-play").addEventListener("click", doPlay);
@@ -730,6 +921,10 @@
     });
   }
 
+  setInterval(function () {
+    if (busy) return;
+    if (eventQ.length || snapQ.length) pumpNet();
+  }, 400);
   window.addEventListener("resize", layoutHand);
   bind();
   try {

@@ -260,6 +260,31 @@
     return state.players.filter(function (p) { return !p.out; }).length;
   }
 
+  function abandon(state, playerIndex) {
+    const p = state.players[playerIndex];
+    if (!p || p.out) return { ok: true, state, folded: 0 };
+    const folded = p.hand.slice();
+    state.drawPile = folded.concat(state.drawPile);
+    p.hand = [];
+    p.out = true;
+    p.left = true;
+    log(state, p.name + " left. " + folded.length + " card" + (folded.length === 1 ? "" : "s") + " under the deck.");
+    if (state.currentPlayer === playerIndex && !state.gameOver) {
+      if (activeCount(state) > 0) state.currentPlayer = nextIndex(state, playerIndex, 1);
+    }
+    if (activeCount(state) === 1) {
+      const last = state.players.findIndex(function (pl) { return !pl.out; });
+      state.gameOver = true;
+      state.winner = last;
+      state.winReason = "left";
+      if (last >= 0) log(state, state.players[last].name + " takes the table. Everyone else walked.");
+    } else if (activeCount(state) === 0) {
+      state.gameOver = true;
+      state.winReason = "left";
+    }
+    return { ok: true, state, folded: folded.length };
+  }
+
   function markOut(state, playerIndex) {
     const p = state.players[playerIndex];
     if (p.out) return;
@@ -353,6 +378,8 @@
   }
 
   function chooseSuit(state, suit) {
+    state.justPlayed = null;
+    state.justPlayedBy = null;
     if (!state.awaitingSuit) return { ok: false, error: "Not naming a suit." };
     if (!SUITS.includes(suit)) return { ok: false, error: "Bad suit." };
     const who = state.currentPlayer;
@@ -522,6 +549,8 @@
   }
 
   function pickUp(state, playerIndex) {
+    state.justPlayed = null;
+    state.justPlayedBy = null;
     if (state.winner != null) return { ok: false, error: "Game over." };
     if (state.awaitingSuit) return { ok: false, error: "Name a suit first." };
     if (playerIndex !== state.currentPlayer) return { ok: false, error: "Not your turn." };
@@ -534,7 +563,7 @@
       state.mustFollowQueen = false;
       log(state, player.name + " eats " + n + ".");
       state.currentPlayer = nextIndex(state, playerIndex, 1);
-      return { ok: true, state };
+      return { ok: true, state, drawnCount: n };
     }
 
     if (state.mustFollowQueen) {
@@ -542,7 +571,7 @@
       state.mustFollowQueen = false;
       log(state, player.name + " can't cover the Queen — picks up 1.");
       state.currentPlayer = nextIndex(state, playerIndex, 1);
-      return { ok: true, state };
+      return { ok: true, state, drawnCount: 1 };
     }
 
     const drawn = drawOne(state, playerIndex);
@@ -550,7 +579,7 @@
     state.justDrew = null;
     state.mustFollowQueen = false;
     state.currentPlayer = nextIndex(state, playerIndex, 1);
-    return { ok: true, state, drew: drawn };
+    return { ok: true, state, drew: drawn, drawnCount: drawn ? 1 : 0 };
   }
 
   function passAfterDraw(state, playerIndex) {
@@ -581,6 +610,7 @@
         name: p.name,
         isAI: p.isAI,
         out: !!p.out,
+        left: !!p.left,
         count: p.hand.length,
         hand: i === viewerIndex ? p.hand.slice() : null,
       })),
@@ -589,6 +619,7 @@
       log: (state.log || []).slice(-12),
       discard: state.discard.slice(-8),
       you: viewerIndex,
+      winReason: state.winReason || null,
     };
   }
 
@@ -598,6 +629,7 @@
     SUIT_NAME,
     createGame,
     playCards,
+    abandon,
     pickUp,
     chooseSuit,
     passAfterDraw,

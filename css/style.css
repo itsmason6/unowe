@@ -97,6 +97,39 @@ html, body {
   padding: 2px 8px 6px;
 }
 .brand { letter-spacing: 0.22em; color: var(--gold); font-size: 18px; }
+.home-btn {
+  min-width: 0;
+  padding: 6px 12px;
+  font-size: 16px;
+  letter-spacing: 0;
+  line-height: 1;
+}
+.menu-wrap { position: relative; }
+.burger-panel {
+  position: absolute;
+  right: 0;
+  top: 36px;
+  min-width: 160px;
+  background: #1a120c;
+  border: 1px solid var(--gold);
+  z-index: 40;
+}
+.burger-panel button {
+  display: block;
+  width: 100%;
+  background: transparent;
+  color: var(--gold-2);
+  border: 0;
+  padding: 12px 14px;
+  letter-spacing: 0.14em;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.burger-panel button:hover { background: #2a1c12; }
+.again-list { margin-top: 8px; font-size: 12px; letter-spacing: 0.08em; color: var(--muted); }
+.again-list div { margin: 3px 0; }
+.again-list .yes { color: var(--gold-2); }
 .tiny { color: var(--muted); font-size: 11px; letter-spacing: 0.12em; }
 
 #opponents { display: flex; justify-content: center; gap: 12px; }
@@ -486,6 +519,12 @@ html, body {
   background: #fff;
   box-shadow: 0 12px 24px rgba(0,0,0,.45);
   transition: left .38s ease, top .38s ease, transform .38s ease;
+}
+.flyer-back {
+  background:
+    repeating-linear-gradient(135deg, #6a1d24 0 8px, #4a1218 8px 16px);
+  border: 2px solid #c9a227;
+  border-radius: 6px;
 }
 .flyer img {
   width: 100%;
