@@ -13,26 +13,15 @@ Open http://localhost:8787
 
 No npm install. Node 18+.
 
-## Vercel (the website)
+## Railway (the whole game)
 
-Vercel serves the pages and the vs-AI table.
-It does **not** keep WebSockets alive, so live rooms need a second host.
+One Node service. Pages + rooms + animations. No Vercel.
 
-1. Put this folder on GitHub
-2. Import the repo in Vercel → Deploy
-3. You get `something.vercel.app`
+1. Push this repo
+2. Railway → New service from the repo
+3. Start command: `node server/server.js`
+4. Open `https://YOUR-SERVICE.up.railway.app`
 
-## Live rooms (Railway / Fly / Render)
+Leave `js/config.js` as `window.UNOWE_SOCKET = ""` so the browser talks to the same host.
 
-1. Deploy the **same repo** as a Node web service
-2. Start command: `node server/server.js`
-3. Copy the public HTTPS URL
-4. Edit `js/config.js` on GitHub:
-
-```js
-window.UNOWE_SOCKET = "wss://YOUR-SERVER.up.railway.app";
-```
-
-5. Redeploy Vercel
-
-Then the Vercel site talks to the socket box.
+Hard refresh after deploy (`Ctrl+Shift+R`) or the old `ui.js` stays cached and opponent cards still teleport.
