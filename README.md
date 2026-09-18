@@ -8,21 +8,31 @@ A shedding card game. Empty your hand first. Last card can still tax you. The ta
 
 Open the site. Play **offline** against the house, or **create a room** and send the code.
 
-Cards are painted in the page (cream faces, brass reverse). You do not need to upload PNG card art.
+Faces use Byron Knoll's classic PNG deck — rank and suit sit in the corner, so a fanned hand stays readable when cards overlap.
 
-## Put it on GitHub, host on Railway
+## Host on Railway (recommended)
 
-No terminal required.
+The repo is already wired for Railway. A production build emits a Node server at `.output/server/index.mjs`, and `npm start` runs it.
 
-1. On GitHub, click **New repository**. Name it `swift-hand`.
-2. Click **uploading an existing file**. Upload everything in this project **except** `node_modules`, `.git`, and `dist` if they appear.
-3. On [Railway](https://railway.com), **New Project** → **Deploy from GitHub repo** → pick `swift-hand`.
-4. Railway will detect Node. If asked:
-   - **Build command:** `npm install && npm run build`
-   - **Start command:** `npm run preview -- --host 0.0.0.0 --port $PORT`
-5. Each time you change files on GitHub (upload or web editor), Railway rebuilds the site.
+1. On GitHub, create a repository (e.g. `swift-hand`) and push this project. Skip `node_modules`.
+2. On [Railway](https://railway.com), **New Project** → **Deploy from GitHub repo** → pick that repo.
+3. Leave the detected commands alone. They should be:
+   - **Build:** `npm ci --include=dev && npm run build:railway`
+   - **Start:** `node .output/server/index.mjs`
+4. Railway sets `PORT`. Do **not** point start at `vite` or `npm run preview` — that is a local preview tool, not the production server.
 
-Rooms use a small signaling database. In Railway, add a Postgres plugin if you want rooms to work across multiple server instances. Offline play works with no extra services.
+If Railway asks you to fill the commands in by hand, use those two exactly. Node 22 is required.
+
+Offline play works with no extra services. Rooms use a small signaling database: add Railway **Postgres**, then set `DATABASE_URL` on the service (available at runtime is enough). Without it, rooms still work on a single instance.
+
+## Host on Vercel
+
+1. Import the same GitHub repo in Vercel.
+2. **Do not** set an Output Directory. The build writes Vercel's Build Output API itself.
+3. Build command: `npm run build` (leave Framework / Nitro detection as-is).
+4. For rooms, add a Postgres addon (Neon works) and set `DATABASE_URL`.
+
+Vercel is serverless. Railway is the better fit if you want a long-running table.
 
 ## Rules in brief
 

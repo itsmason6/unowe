@@ -1,4 +1,4 @@
-import { readdirSync } from "node:fs";
+import { copyFileSync, existsSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { Plugin } from "vite";
 import { defineConfig } from "vite";
@@ -18,6 +18,62 @@ function hasGlobbedMigrations(root: string): boolean {
     return readdirSync(join(root, "migrations")).some(isMigrationFile);
   } catch {
     return false;
+  }
+}
+
+/**
+ * Vercel is the default (Grok publish + `vite preview`).
+ * Railway (and any host that needs a long-running Node process) must use
+ * `node-server` so the build emits `.output/server/index.mjs`.
+ */
+function resolveNitroPreset(isPreview: boolean | undefined): string {
+  if (isPreview) return "vercel";
+  const explicit = process.env.NITRO_PRESET?.trim();
+  if (explicit) return explicit;
+  if (
+    process.env.RAILWAY_ENVIRONMENT ||
+    process.env.RAILWAY_PROJECT_ID ||
+    process.env.RAILWAY
+  ) {
+    return "node-server";
+  }
+  return "vercel";
+}
+
+const PGLITE_SIDECARS = ["pglite.wasm", "pglite.data", "initdb.wasm"];
+
+/** Nitro traces the PGLite JS but drops the wasm/data files it reads at runtime. */
+function copyPgliteSidecars(root: string) {
+  const srcDir = join(process.cwd(), "node_modules/@electric-sql/pglite/dist");
+  if (!existsSync(srcDir) || !existsSync(root)) return;
+  const destDirs = new Set<string>();
+  const walk = (dir: string) => {
+    let entries: string[] = [];
+    try {
+      entries = readdirSync(dir);
+    } catch {
+      return;
+    }
+    for (const name of entries) {
+      const p = join(dir, name);
+      let st;
+      try {
+        st = statSync(p);
+      } catch {
+        continue;
+      }
+      if (st.isDirectory()) walk(p);
+      else if (name.includes("pglite") && (name.endsWith(".mjs") || name.endsWith(".js"))) {
+        destDirs.add(dir);
+      }
+    }
+  };
+  walk(root);
+  for (const dir of destDirs) {
+    for (const file of PGLITE_SIDECARS) {
+      const from = join(srcDir, file);
+      if (existsSync(from)) copyFileSync(from, join(dir, file));
+    }
   }
 }
 
@@ -170,11 +226,17 @@ export default defineConfig(({ command, isPreview }) => ({
     ...(command === "build" || isPreview
       ? [
           nitro({
-            preset: "vercel",
+            preset: resolveNitroPreset(isPreview),
             // Auto-registers server/middleware/* (the PWA install page +
             // manifest + head-tag middleware). Nitro v3 defaults serverDir to
             // false, so removing this silently unwires /?install=1 on deploys.
             serverDir: "./server",
+            hooks: {
+              compiled(nitro) {
+                copyPgliteSidecars(nitro.options.output.dir);
+                copyPgliteSidecars(nitro.options.output.serverDir);
+              },
+            },
           }),
         ]
       : []),
