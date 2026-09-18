@@ -1,10 +1,9 @@
 [variables]
 NITRO_PRESET = "node-server"
-NPM_CONFIG_PRODUCTION = "false"
 NIXPACKS_NODE_VERSION = "22"
 
 [phases.install]
-cmds = ["npm ci --include=dev"]
+cmds = ["npm install --include=dev --no-audit --no-fund"]
 
 [phases.build]
 cmds = ["npm run build:railway"]

@@ -14,14 +14,15 @@ Faces use Byron Knoll's classic PNG deck — rank and suit sit in the corner, so
 
 The repo is already wired for Railway. A production build emits a Node server at `.output/server/index.mjs`, and `npm start` runs it.
 
-1. On GitHub, create a repository (e.g. `swift-hand`) and push this project. Skip `node_modules`.
-2. On [Railway](https://railway.com), **New Project** → **Deploy from GitHub repo** → pick that repo.
-3. Leave the detected commands alone. They should be:
-   - **Build:** `npm ci --include=dev && npm run build:railway`
+1. On GitHub, create a repository (e.g. `swift-hand`).
+2. Upload the project files. Include `package.json` **and** `package-lock.json`. Skip `node_modules`.
+3. On [Railway](https://railway.com), **New Project** → **Deploy from GitHub repo** → pick that repo.
+4. Leave install/build/start alone if Railway detects them. If you fill them in by hand:
+   - **Install / build:** `npm install --include=dev && npm run build:railway`
    - **Start:** `node .output/server/index.mjs`
-4. Railway sets `PORT`. Do **not** point start at `vite` or `npm run preview` — that is a local preview tool, not the production server.
+5. Redeploy after you upload a new `package-lock.json`.
 
-If Railway asks you to fill the commands in by hand, use those two exactly. Node 22 is required.
+Do **not** start the site with `vite` or `npm run preview`. Railway sets `PORT` itself.
 
 Offline play works with no extra services. Rooms use a small signaling database: add Railway **Postgres**, then set `DATABASE_URL` on the service (available at runtime is enough). Without it, rooms still work on a single instance.
 
