@@ -12,28 +12,42 @@ Faces use Byron Knoll's classic PNG deck — rank and suit sit in the corner, so
 
 ## Host on Railway (recommended)
 
-The repo is already wired for Railway. A production build emits a Node server at `.output/server/index.mjs`, and `npm start` runs it.
+Upload the **whole unzipped project** to GitHub. The `scripts` folder is required. Skip `node_modules`.
 
-1. On GitHub, create a repository (e.g. `swift-hand`).
-2. Upload the project files. Include `package.json` **and** `package-lock.json`. Skip `node_modules`.
-3. On [Railway](https://railway.com), **New Project** → **Deploy from GitHub repo** → pick that repo.
-4. Leave install/build/start alone if Railway detects them. If you fill them in by hand:
-   - **Install / build:** `npm install --include=dev && npm run build:railway`
-   - **Start:** `node .output/server/index.mjs`
-5. Redeploy after you upload a new `package-lock.json`.
+Folders that must be on GitHub:
 
-Do **not** start the site with `vite` or `npm run preview`. Railway sets `PORT` itself.
+- `src`
+- `public` (including `public/cards` and `public/__grok`)
+- `scripts`
+- `server`
+- `migrations`
 
-Offline play works with no extra services. Rooms use a small signaling database: add Railway **Postgres**, then set `DATABASE_URL` on the service (available at runtime is enough). Without it, rooms still work on a single instance.
+Root files that must be on GitHub:
+
+- `package.json`
+- `package-lock.json`
+- `railway-build.mjs`
+- `vite.config.ts`
+- `tsconfig.json`
+- `railway.json`
+- `nixpacks.toml`
+- `.npmrc`
+
+Then on [Railway](https://railway.com): **New Project → Deploy from GitHub repo**. If you fill commands in by hand:
+
+- **Install / build:** `npm install --include=dev && npm run build:railway`
+- **Start:** `node .output/server/index.mjs`
+
+Do **not** start the site with `vite` or `npm run preview`.
+
+Offline play works with no extra services. For rooms across restarts, add Railway Postgres and set `DATABASE_URL`.
 
 ## Host on Vercel
 
 1. Import the same GitHub repo in Vercel.
-2. **Do not** set an Output Directory. The build writes Vercel's Build Output API itself.
-3. Build command: `npm run build` (leave Framework / Nitro detection as-is).
-4. For rooms, add a Postgres addon (Neon works) and set `DATABASE_URL`.
-
-Vercel is serverless. Railway is the better fit if you want a long-running table.
+2. **Do not** set an Output Directory.
+3. Build command: `npm run build`.
+4. For rooms, add a Postgres addon and set `DATABASE_URL`.
 
 ## Rules in brief
 
