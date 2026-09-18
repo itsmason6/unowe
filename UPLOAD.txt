@@ -1,0 +1,7 @@
+This folder is the whole SWIFT HAND website.
+
+1. Upload this entire `swift-hand` folder to GitHub.
+2. In Railway, set Root Directory to: swift-hand
+3. Build: npm install --include=dev && npm run build:railway
+4. Start: node .output/server/index.mjs
+5. Do not upload node_modules.

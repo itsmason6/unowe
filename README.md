@@ -12,42 +12,26 @@ Faces use Byron Knoll's classic PNG deck — rank and suit sit in the corner, so
 
 ## Host on Railway (recommended)
 
-Upload the **whole unzipped project** to GitHub. The `scripts` folder is required. Skip `node_modules`.
+The GitHub zip unpacks to **one folder** named `swift-hand`. That folder is the whole website.
 
-Folders that must be on GitHub:
+1. Upload the `swift-hand` folder to your GitHub repo.
+2. In Railway: **New Project → Deploy from GitHub repo**.
+3. Set **Root Directory** to `swift-hand` (so Railway sees `package.json`).
+4. If you fill commands in by hand:
+   - **Install / build:** `npm install --include=dev && npm run build:railway`
+   - **Start:** `node .output/server/index.mjs`
 
-- `src`
-- `public` (including `public/cards` and `public/__grok`)
-- `scripts`
-- `server`
-- `migrations`
-
-Root files that must be on GitHub:
-
-- `package.json`
-- `package-lock.json`
-- `railway-build.mjs`
-- `vite.config.ts`
-- `tsconfig.json`
-- `railway.json`
-- `nixpacks.toml`
-- `.npmrc`
-
-Then on [Railway](https://railway.com): **New Project → Deploy from GitHub repo**. If you fill commands in by hand:
-
-- **Install / build:** `npm install --include=dev && npm run build:railway`
-- **Start:** `node .output/server/index.mjs`
-
-Do **not** start the site with `vite` or `npm run preview`.
+Do **not** start the site with `vite` or `npm run preview`. Skip `node_modules`.
 
 Offline play works with no extra services. For rooms across restarts, add Railway Postgres and set `DATABASE_URL`.
 
 ## Host on Vercel
 
 1. Import the same GitHub repo in Vercel.
-2. **Do not** set an Output Directory.
-3. Build command: `npm run build`.
-4. For rooms, add a Postgres addon and set `DATABASE_URL`.
+2. Set Root Directory to `swift-hand` if that is how the repo is laid out.
+3. **Do not** set an Output Directory.
+4. Build command: `npm run build`.
+5. For rooms, add a Postgres addon and set `DATABASE_URL`.
 
 ## Rules in brief
 
